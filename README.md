@@ -19,5 +19,5 @@ intervalはStatusの更新間隔です。デフォルトは5秒です。
 ## Libraries
 
 - [DiscordGo](https://github.com/bwmarrin/discordgo)
-- [gopsutil](htps://github.com/shirou/gopsutil)
+- [gopsutil](https://github.com/shirou/gopsutil)
 - [dotenv](https://github.com/bkeepers/dotenv)
