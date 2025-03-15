@@ -19,14 +19,15 @@ func UpdateSystemStatus(s *discordgo.Session, intervalSeconds int) {
 		// CPU使用率を取得
 		cpuPercent, err := cpu.Percent(0, false)
 		if err != nil {
-			log.Fatalf("Error: Failed to get CPU information: %v\n", err)
+			log.Printf("Error: Failed to get CPU information: %v\n", err)
+			<-ticker.C
 			continue
 		}
 
 		// メモリ使用率を取得
 		memInfo, err := mem.VirtualMemory()
 		if err != nil {
-			log.Fatalf("Error: Failed to get memory information: %v\n", err)
+			log.Printf("Error: Failed to get memory information: %v\n", err)
 			continue
 		}
 
@@ -44,7 +45,7 @@ func UpdateSystemStatus(s *discordgo.Session, intervalSeconds int) {
 			Status: "online",
 		})
 		if err != nil {
-			log.Fatalf("Error: Failed to update status: %v\n", err)
+			log.Printf("Error: Failed to update status: %v\n", err)
 		}
 
 		<-ticker.C

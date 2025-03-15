@@ -34,6 +34,6 @@ func handlePing(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		},
 	})
 	if err != nil {
-		log.Fatalf("Error: Failed to respond to ping command: %v", err)
+		log.Printf("Error: Failed to respond to ping command: %v", err)
 	}
 }
