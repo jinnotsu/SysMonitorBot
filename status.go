@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // 指定された間隔でシステムのステータスを更新
 func UpdateSystemStatus(s *discordgo.Session, intervalSeconds int) {
-    ticker := time.NewTicker(time.Duration(intervalSeconds) * time.Second)
-    defer ticker.Stop()
+	ticker := time.NewTicker(time.Duration(intervalSeconds) * time.Second)
+	defer ticker.Stop()
 
 	for {
 		// CPU使用率を取得
