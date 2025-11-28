@@ -1,0 +1,9 @@
+﻿services:
+  sysmonitorbot:
+    build: .
+    container_name: sysmonitorbot
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Override interval if needed (default: 10 seconds)
+    # command: ["-interval", "30"]

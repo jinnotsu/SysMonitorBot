@@ -1,0 +1,29 @@
+﻿# Git
+.git
+.gitignore
+
+# GitHub
+.github
+
+# Binaries
+*.exe
+sysmonitorbot
+
+# Environment files (handled separately)
+.env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentation images
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# OS files
+Thumbs.db
+.DS_Store

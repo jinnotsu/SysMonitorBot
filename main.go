@@ -11,15 +11,16 @@ import (
 )
 
 func main() {
-    interval := flag.Int("interval", 10, "Interval to update system status in seconds")
+	interval := flag.Int("interval", 1800, "Interval to update system status in seconds")
 	flag.Parse()
 
-	// .envファイルから環境変数を読み込む
+	// .envファイルから環境変数を読み込む（ファイルが存在しない場合は無視）
+	// Docker環境では環境変数が直接渡されるため、エラーは致命的ではない
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error: Failed to load .env file: %v", err)
+		log.Println("Info: .env file not found, using environment variables")
 	}
 
-	// .envファイルからDISCORD_TOKENを取得
+	// 環境変数からDISCORD_TOKENを取得
 	token := os.Getenv("DISCORD_TOKEN")
 	if token == "" {
 		log.Fatal("Error: DISCORD_TOKEN is not set")
@@ -47,7 +48,7 @@ func main() {
 
 	// status.goの呼び出し
 	go UpdateSystemStatus(dg, *interval)
-	
+
 	// Ctrl+Cで終了
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
