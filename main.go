@@ -3,12 +3,36 @@ package main
 import (
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 )
+
+// ヘルスチェック用
+func startHealthCheckServer() {
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("SysMonitorBot is running"))
+	})
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+
+	log.Printf("Starting health check server on port %s", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Printf("Health check server error: %v", err)
+	}
+}
 
 func main() {
 	interval := flag.Int("interval", 1800, "Interval to update system status in seconds")
@@ -45,6 +69,9 @@ func main() {
 	}
 	defer dg.Close()
 	log.Println("Its running!")
+
+	// ヘルスチェックサーバーを起動
+	go startHealthCheckServer()
 
 	// status.goの呼び出し
 	go UpdateSystemStatus(dg, *interval)

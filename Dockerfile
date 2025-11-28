@@ -39,6 +39,9 @@ COPY --from=builder /app/sysmonitorbot .
 # Default interval (can be overridden)
 ENV INTERVAL=1800
 
+# Expose health check port
+EXPOSE 8000
+
 # Run the bot
 ENTRYPOINT ["./sysmonitorbot"]
 CMD ["-interval", "1800"]
