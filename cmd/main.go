@@ -3,36 +3,17 @@ package main
 import (
 	"flag"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
+	"strings"
+
+	"SysMonitorBot/internal/handlers"
+	"SysMonitorBot/internal/server"
+	"SysMonitorBot/internal/services"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 )
-
-// ヘルスチェック用
-func startHealthCheckServer() {
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("SysMonitorBot is running"))
-	})
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8000"
-	}
-
-	log.Printf("Starting health check server on port %s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Printf("Health check server error: %v", err)
-	}
-}
 
 func main() {
 	interval := flag.Int("interval", 1800, "Interval to update system status in seconds")
@@ -56,11 +37,17 @@ func main() {
 		log.Fatalf("Error: Failed to create session")
 	}
 
-	// スラッシュコマンドの呼び出し
+	// スラッシュコマンドの登録
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		SlashCommand(s)
+		handlers.RegisterSlashCommands(s)
 		log.Println("Registered slash commands")
+
+		// 匿名ボードの設置
+		handlers.SetupAnonymousBoard(s)
 	})
+
+	// 匿名ボードのインタラクションハンドラーを追加
+	dg.AddHandler(handlers.HandleAnonymousBoardInteraction)
 
 	// セッションの開始
 	err = dg.Open()
@@ -70,11 +57,16 @@ func main() {
 	defer dg.Close()
 	log.Println("Its running!")
 
-	// ヘルスチェックサーバーを起動
-	go startHealthCheckServer()
+	// ヘルスチェックサーバーを起動（環境変数で制御）
+	healthCheckEnabled := os.Getenv("HEALTH_CHECK_ENABLED")
+	if healthCheckEnabled == "" || strings.ToLower(healthCheckEnabled) == "true" {
+		go server.StartHealthCheckServer()
+	} else {
+		log.Println("Health check server is disabled")
+	}
 
-	// status.goの呼び出し
-	go UpdateSystemStatus(dg, *interval)
+	// ステータス更新の開始
+	go services.UpdateSystemStatus(dg, *interval)
 
 	// Ctrl+Cで終了
 	stop := make(chan os.Signal, 1)

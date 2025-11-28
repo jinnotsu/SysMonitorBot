@@ -15,10 +15,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY *.go ./
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o sysmonitorbot .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o sysmonitorbot ./cmd
 
 # ==========================================
 # Runtime stage

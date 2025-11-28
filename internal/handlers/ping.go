@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"fmt"
@@ -7,9 +7,9 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-// Pingスラッシュコマンドを登録
-func SlashCommand(s *discordgo.Session) {
-	s.AddHandler(handlePing)
+// RegisterSlashCommands はスラッシュコマンドを登録します
+func RegisterSlashCommands(s *discordgo.Session) {
+	s.AddHandler(HandlePing)
 
 	cmd := &discordgo.ApplicationCommand{
 		Name:        "ping",
@@ -22,8 +22,12 @@ func SlashCommand(s *discordgo.Session) {
 	}
 }
 
-// Pingスラッシュコマンドの処理
-func handlePing(s *discordgo.Session, i *discordgo.InteractionCreate) {
+// HandlePing はPingスラッシュコマンドの処理を行います
+func HandlePing(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// ApplicationCommandタイプのインタラクションのみ処理
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return
+	}
 	if i.ApplicationCommandData().Name != "ping" {
 		return
 	}

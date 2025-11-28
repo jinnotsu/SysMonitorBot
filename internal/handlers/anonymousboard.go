@@ -1,0 +1,231 @@
+package handlers
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
+)
+
+const (
+	// ボタンのカスタムID
+	AnonymousPostButtonID = "anonymous_post_button"
+	// モーダルのカスタムID
+	AnonymousPostModalID = "anonymous_post_modal"
+	// TextInputのカスタムID
+	AnonymousPostInputID = "anonymous_post_input"
+	// デフォルトの削除時間（秒）
+	DefaultDeleteSeconds = 86400 // 24時間
+)
+
+// getDeleteDuration は環境変数から削除までの時間を取得します
+func getDeleteDuration() time.Duration {
+	secondsStr := os.Getenv("ANONYMOUS_MESSAGE_DELETE_SECONDS")
+	if secondsStr == "" {
+		return time.Duration(DefaultDeleteSeconds) * time.Second
+	}
+
+	seconds, err := strconv.Atoi(secondsStr)
+	if err != nil || seconds <= 0 {
+		log.Printf("Warning: Invalid ANONYMOUS_MESSAGE_DELETE_SECONDS value '%s', using default %d seconds", secondsStr, DefaultDeleteSeconds)
+		return time.Duration(DefaultDeleteSeconds) * time.Second
+	}
+
+	return time.Duration(seconds) * time.Second
+}
+
+// formatDuration は時間を人間が読みやすい形式にフォーマットします
+func formatDuration(d time.Duration) string {
+	if d >= 24*time.Hour {
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "24時間"
+		}
+		return fmt.Sprintf("%d日", days)
+	} else if d >= time.Hour {
+		hours := int(d.Hours())
+		return fmt.Sprintf("%d時間", hours)
+	} else if d >= time.Minute {
+		minutes := int(d.Minutes())
+		return fmt.Sprintf("%d分", minutes)
+	}
+	return fmt.Sprintf("%d秒", int(d.Seconds()))
+}
+
+// SetupAnonymousBoard は指定されたチャンネルに匿名投稿ボタンを設置します
+func SetupAnonymousBoard(s *discordgo.Session) {
+	// 環境変数からボタンを設置するチャンネルIDを取得
+	buttonChannelID := os.Getenv("ANONYMOUS_BUTTON_CHANNEL_ID")
+	if buttonChannelID == "" {
+		log.Println("Info: ANONYMOUS_BUTTON_CHANNEL_ID is not set, anonymous board feature disabled")
+		return
+	}
+
+	// 投稿先チャンネルIDを確認
+	postChannelID := os.Getenv("ANONYMOUS_POST_CHANNEL_ID")
+	if postChannelID == "" {
+		log.Println("Info: ANONYMOUS_POST_CHANNEL_ID is not set, anonymous board feature disabled")
+		return
+	}
+
+	// 削除時間を取得
+	deleteDuration := getDeleteDuration()
+	deleteTimeStr := formatDuration(deleteDuration)
+
+	// ボタン付きメッセージを送信
+	_, err := s.ChannelMessageSendComplex(buttonChannelID, &discordgo.MessageSend{
+		Content: fmt.Sprintf("📝 **匿名メッセージボード**\n下のボタンをクリックしてメッセージを投稿できます。\n投稿されたメッセージは%s後に自動削除されます。", deleteTimeStr),
+		Components: []discordgo.MessageComponent{
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.Button{
+						Label:    "メッセージを投稿",
+						Style:    discordgo.PrimaryButton,
+						CustomID: AnonymousPostButtonID,
+						Emoji: &discordgo.ComponentEmoji{
+							Name: "✉️",
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("Error: Failed to send anonymous board button: %v", err)
+		return
+	}
+	log.Println("Anonymous board button sent successfully")
+}
+
+// HandleAnonymousBoardInteraction は匿名ボード関連のインタラクションを処理します
+func HandleAnonymousBoardInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	switch i.Type {
+	case discordgo.InteractionMessageComponent:
+		// ボタンクリック時の処理
+		if i.MessageComponentData().CustomID == AnonymousPostButtonID {
+			handleButtonClick(s, i)
+		}
+	case discordgo.InteractionModalSubmit:
+		// モーダル送信時の処理
+		if i.ModalSubmitData().CustomID == AnonymousPostModalID {
+			handleModalSubmit(s, i)
+		}
+	}
+}
+
+// handleButtonClick はボタンクリック時にモーダルを表示します
+func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			CustomID: AnonymousPostModalID,
+			Title:    "匿名メッセージを投稿",
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    AnonymousPostInputID,
+							Label:       "メッセージ内容",
+							Style:       discordgo.TextInputParagraph,
+							Placeholder: "投稿したいメッセージを入力してください...",
+							Required:    true,
+							MinLength:   1,
+							MaxLength:   2000,
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		log.Printf("Error: Failed to respond with modal: %v", err)
+	}
+}
+
+// handleModalSubmit はモーダル送信時にメッセージを投稿します
+func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// 投稿先チャンネルIDを取得
+	postChannelID := os.Getenv("ANONYMOUS_POST_CHANNEL_ID")
+	if postChannelID == "" {
+		respondWithError(s, i, "投稿先チャンネルが設定されていません。")
+		return
+	}
+
+	// モーダルからメッセージを取得
+	data := i.ModalSubmitData()
+	var messageContent string
+	for _, comp := range data.Components {
+		if row, ok := comp.(*discordgo.ActionsRow); ok {
+			for _, rowComp := range row.Components {
+				if textInput, ok := rowComp.(*discordgo.TextInput); ok {
+					if textInput.CustomID == AnonymousPostInputID {
+						messageContent = textInput.Value
+					}
+				}
+			}
+		}
+	}
+
+	if messageContent == "" {
+		respondWithError(s, i, "メッセージが空です。")
+		return
+	}
+
+	// 削除時間を取得
+	deleteDuration := getDeleteDuration()
+	deleteTimeStr := formatDuration(deleteDuration)
+
+	// メッセージを投稿
+	msg, err := s.ChannelMessageSend(postChannelID, fmt.Sprintf("%s", messageContent))
+	if err != nil {
+		log.Printf("Error: Failed to send anonymous message: %v", err)
+		respondWithError(s, i, "メッセージの投稿に失敗しました。")
+		return
+	}
+
+	// 指定時間後にメッセージを削除するタイマーを設定
+	scheduleMessageDeletion(s, postChannelID, msg.ID, deleteDuration)
+
+	// 成功レスポンス
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("✅ メッセージが投稿されました！%s後に自動削除されます。", deleteTimeStr),
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		log.Printf("Error: Failed to respond to modal submit: %v", err)
+	}
+}
+
+// scheduleMessageDeletion は指定時間後にメッセージを削除するスケジュールを設定します
+func scheduleMessageDeletion(s *discordgo.Session, channelID, messageID string, duration time.Duration) {
+	log.Printf("Scheduled message deletion: Channel=%s, Message=%s, Duration=%v", channelID, messageID, duration)
+
+	time.AfterFunc(duration, func() {
+		err := s.ChannelMessageDelete(channelID, messageID)
+		if err != nil {
+			log.Printf("Error: Failed to delete scheduled message (Channel=%s, Message=%s): %v", channelID, messageID, err)
+		} else {
+			log.Printf("Successfully deleted scheduled message: Channel=%s, Message=%s", channelID, messageID)
+		}
+	})
+}
+
+// respondWithError はエラーメッセージをエフェメラルメッセージとして返します
+func respondWithError(s *discordgo.Session, i *discordgo.InteractionCreate, message string) {
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "❌ " + message,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		log.Printf("Error: Failed to respond with error message: %v", err)
+	}
+}
