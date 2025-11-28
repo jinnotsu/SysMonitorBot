@@ -17,8 +17,12 @@ const (
 	AnonymousPostModalID = "anonymous_post_modal"
 	// TextInputのカスタムID
 	AnonymousPostInputID = "anonymous_post_input"
+	// 削除時間入力のカスタムID
+	AnonymousDeleteTimeInputID = "anonymous_delete_time_input"
 	// デフォルトの削除時間（秒）
 	DefaultDeleteSeconds = 86400 // 24時間
+	// 最大削除時間（秒）
+	MaxDeleteSeconds = 604800 // 7日
 )
 
 // getDeleteDuration は環境変数から削除までの時間を取得します
@@ -118,6 +122,10 @@ func HandleAnonymousBoardInteraction(s *discordgo.Session, i *discordgo.Interact
 
 // handleButtonClick はボタンクリック時にモーダルを表示します
 func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// デフォルトの削除時間を取得
+	defaultDuration := getDeleteDuration()
+	defaultSeconds := int(defaultDuration.Seconds())
+
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
@@ -134,6 +142,20 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 							Required:    true,
 							MinLength:   1,
 							MaxLength:   2000,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    AnonymousDeleteTimeInputID,
+							Label:       "削除までの時間（秒）",
+							Style:       discordgo.TextInputShort,
+							Placeholder: fmt.Sprintf("1～604800秒（デフォルト: %d秒）", defaultSeconds),
+							Required:    false,
+							MinLength:   0,
+							MaxLength:   7,
+							Value:       strconv.Itoa(defaultSeconds),
 						},
 					},
 				},
@@ -154,15 +176,19 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
-	// モーダルからメッセージを取得
+	// モーダルからメッセージと削除時間を取得
 	data := i.ModalSubmitData()
 	var messageContent string
+	var deleteTimeStr string
 	for _, comp := range data.Components {
 		if row, ok := comp.(*discordgo.ActionsRow); ok {
 			for _, rowComp := range row.Components {
 				if textInput, ok := rowComp.(*discordgo.TextInput); ok {
-					if textInput.CustomID == AnonymousPostInputID {
+					switch textInput.CustomID {
+					case AnonymousPostInputID:
 						messageContent = textInput.Value
+					case AnonymousDeleteTimeInputID:
+						deleteTimeStr = textInput.Value
 					}
 				}
 			}
@@ -174,12 +200,29 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
-	// 削除時間を取得
-	deleteDuration := getDeleteDuration()
-	deleteTimeStr := formatDuration(deleteDuration)
+	// 削除時間を解析
+	deleteDuration := getDeleteDuration() // デフォルト値
+	if deleteTimeStr != "" {
+		seconds, err := strconv.Atoi(deleteTimeStr)
+		if err != nil {
+			respondWithError(s, i, "削除時間は数字で入力してください。")
+			return
+		}
+		if seconds <= 0 {
+			respondWithError(s, i, "削除時間は1秒以上で指定してください。")
+			return
+		}
+		if seconds > MaxDeleteSeconds {
+			respondWithError(s, i, fmt.Sprintf("削除時間は%d秒以下で指定してください。", MaxDeleteSeconds))
+			return
+		}
+		deleteDuration = time.Duration(seconds) * time.Second
+	}
+
+	deleteTimeDisplayStr := formatDuration(deleteDuration)
 
 	// メッセージを投稿
-	msg, err := s.ChannelMessageSend(postChannelID, fmt.Sprintf("%s", messageContent))
+	msg, err := s.ChannelMessageSend(postChannelID, messageContent)
 	if err != nil {
 		log.Printf("Error: Failed to send anonymous message: %v", err)
 		respondWithError(s, i, "メッセージの投稿に失敗しました。")
@@ -193,7 +236,7 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("✅ メッセージが投稿されました！%s後に自動削除されます。", deleteTimeStr),
+			Content: fmt.Sprintf("✅ メッセージが投稿されました！%s後に自動削除されます。", deleteTimeDisplayStr),
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
