@@ -219,7 +219,7 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
 			CustomID: AnonymousPostModalID,
-			Title:    "匿名メッセージを投稿",
+			Title:    "メッセージを投稿",
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -238,7 +238,7 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 					Components: []discordgo.MessageComponent{
 						discordgo.TextInput{
 							CustomID:    AnonymousMentionInputID,
-							Label:       "メンション（Embed外に表示）",
+							Label:       "メンション",
 							Style:       discordgo.TextInputShort,
 							Placeholder: "@everyone, @here, @ロール名 など",
 							Required:    false,
