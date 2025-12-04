@@ -19,6 +19,8 @@ const (
 	AnonymousPostInputID = "anonymous_post_input"
 	// 削除時間入力のカスタムID
 	AnonymousDeleteTimeInputID = "anonymous_delete_time_input"
+	// メンション入力のカスタムID
+	AnonymousMentionInputID = "anonymous_mention_input"
 	// デフォルトの削除時間（秒）
 	DefaultDeleteSeconds = 86400 // 24時間
 	// 最大削除時間（秒）
@@ -235,6 +237,19 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
 						discordgo.TextInput{
+							CustomID:    AnonymousMentionInputID,
+							Label:       "メンション（Embed外に表示）",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "@everyone, @here, @ロール名 など",
+							Required:    false,
+							MinLength:   0,
+							MaxLength:   100,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
 							CustomID:    AnonymousDeleteTimeInputID,
 							Label:       "削除までの時間（秒）",
 							Style:       discordgo.TextInputShort,
@@ -267,6 +282,7 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ModalSubmitData()
 	var messageContent string
 	var deleteTimeStr string
+	var mentionContent string
 	for _, comp := range data.Components {
 		if row, ok := comp.(*discordgo.ActionsRow); ok {
 			for _, rowComp := range row.Components {
@@ -276,6 +292,8 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 						messageContent = textInput.Value
 					case AnonymousDeleteTimeInputID:
 						deleteTimeStr = textInput.Value
+					case AnonymousMentionInputID:
+						mentionContent = textInput.Value
 					}
 				}
 			}
@@ -307,14 +325,29 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
 	// メッセージを埋め込み形式で投稿
-	msg, err := s.ChannelMessageSendComplex(postChannelID, &discordgo.MessageSend{
+	// メンションはEmbed外のContentに追加（Embed内のメンションは通知されないため）
+	messageSend := &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{
 			{
 				Description: messageContent,
 				Color:       0x5865F2, // Discord Blurple
 			},
 		},
-	})
+	}
+
+	// メンションが指定されている場合、Contentに追加しAllowedMentionsを設定
+	if mentionContent != "" {
+		messageSend.Content = mentionContent
+		messageSend.AllowedMentions = &discordgo.MessageAllowedMentions{
+			Parse: []discordgo.AllowedMentionType{
+				discordgo.AllowedMentionTypeEveryone,
+				discordgo.AllowedMentionTypeRoles,
+				discordgo.AllowedMentionTypeUsers,
+			},
+		}
+	}
+
+	msg, err := s.ChannelMessageSendComplex(postChannelID, messageSend)
 	if err != nil {
 		log.Printf("Error: Failed to send anonymous message: %v", err)
 		respondWithError(s, i, "メッセージの投稿に失敗しました。")
