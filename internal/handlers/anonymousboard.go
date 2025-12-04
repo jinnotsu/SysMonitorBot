@@ -93,7 +93,9 @@ func SetupAnonymousBoard(s *discordgo.Session) {
 						Style:    discordgo.PrimaryButton,
 						CustomID: AnonymousPostButtonID,
 						Emoji: &discordgo.ComponentEmoji{
-							Name: "<a:noted:1446011172754161788>",
+							Name:     "noted",
+							ID:       "1446011172754161788",
+							Animated: true,
 						},
 					},
 				},
