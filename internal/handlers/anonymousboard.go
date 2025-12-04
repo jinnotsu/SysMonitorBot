@@ -26,6 +26,7 @@ const (
 )
 
 // getDeleteDuration は環境変数から削除までの時間を取得します
+// 0を返す場合は自動削除が無効であることを示します
 func getDeleteDuration() time.Duration {
 	secondsStr := os.Getenv("ANONYMOUS_MESSAGE_DELETE_SECONDS")
 	if secondsStr == "" {
@@ -33,9 +34,14 @@ func getDeleteDuration() time.Duration {
 	}
 
 	seconds, err := strconv.Atoi(secondsStr)
-	if err != nil || seconds <= 0 {
+	if err != nil || seconds < 0 {
 		log.Printf("Warning: Invalid ANONYMOUS_MESSAGE_DELETE_SECONDS value '%s', using default %d seconds", secondsStr, DefaultDeleteSeconds)
 		return time.Duration(DefaultDeleteSeconds) * time.Second
+	}
+
+	// 0の場合は自動削除を無効化（0を返す）
+	if seconds == 0 {
+		return 0
 	}
 
 	return time.Duration(seconds) * time.Second
@@ -80,14 +86,20 @@ func SetupAnonymousBoard(s *discordgo.Session) {
 
 	// 削除時間を取得
 	deleteDuration := getDeleteDuration()
-	deleteTimeStr := formatDuration(deleteDuration)
+	var descriptionText string
+	if deleteDuration == 0 {
+		descriptionText = "投稿されたメッセージは自動削除されません。"
+	} else {
+		deleteTimeStr := formatDuration(deleteDuration)
+		descriptionText = fmt.Sprintf("投稿されたメッセージは%s後に自動削除されます。", deleteTimeStr)
+	}
 
 	// ボタン付きメッセージを送信
 	_, err := s.ChannelMessageSendComplex(buttonChannelID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{
 			{
 				Title:       "<a:noted:1446011172754161788> 匿名メッセージボード",
-				Description: fmt.Sprintf("投稿されたメッセージは%s後に自動削除されます。", deleteTimeStr),
+				Description: descriptionText,
 				Color:       0x5865F2, // Discord Blurple
 			},
 		},
@@ -190,6 +202,17 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	defaultDuration := getDeleteDuration()
 	defaultSeconds := int(defaultDuration.Seconds())
 
+	// プレースホルダーとデフォルト値を設定
+	var placeholder string
+	var defaultValue string
+	if defaultSeconds == 0 {
+		placeholder = "0～604800秒（0で自動削除無効）"
+		defaultValue = "0"
+	} else {
+		placeholder = fmt.Sprintf("0～604800秒（デフォルト: %d秒、0で無効）", defaultSeconds)
+		defaultValue = strconv.Itoa(defaultSeconds)
+	}
+
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
@@ -215,11 +238,11 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 							CustomID:    AnonymousDeleteTimeInputID,
 							Label:       "削除までの時間（秒）",
 							Style:       discordgo.TextInputShort,
-							Placeholder: fmt.Sprintf("1～604800秒（デフォルト: %d秒）", defaultSeconds),
+							Placeholder: placeholder,
 							Required:    false,
 							MinLength:   0,
 							MaxLength:   7,
-							Value:       strconv.Itoa(defaultSeconds),
+							Value:       defaultValue,
 						},
 					},
 				},
@@ -272,8 +295,8 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			respondWithError(s, i, "削除時間は数字で入力してください。")
 			return
 		}
-		if seconds <= 0 {
-			respondWithError(s, i, "削除時間は1秒以上で指定してください。")
+		if seconds < 0 {
+			respondWithError(s, i, "削除時間は0秒以上で指定してください。")
 			return
 		}
 		if seconds > MaxDeleteSeconds {
@@ -283,8 +306,6 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		deleteDuration = time.Duration(seconds) * time.Second
 	}
 
-	deleteTimeDisplayStr := formatDuration(deleteDuration)
-
 	// メッセージを投稿
 	msg, err := s.ChannelMessageSend(postChannelID, messageContent)
 	if err != nil {
@@ -293,15 +314,28 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
-	// 指定時間後にメッセージを削除するタイマーを設定
-	scheduleMessageDeletion(s, postChannelID, msg.ID, deleteDuration)
+	// 削除時間が0より大きい場合のみ、自動削除をスケジュール
+	var successDescription string
+	if deleteDuration > 0 {
+		scheduleMessageDeletion(s, postChannelID, msg.ID, deleteDuration)
+		deleteTimeDisplayStr := formatDuration(deleteDuration)
+		successDescription = fmt.Sprintf("メッセージが投稿されました！\n%s後に自動削除されます。", deleteTimeDisplayStr)
+	} else {
+		successDescription = "メッセージが投稿されました！\n自動削除は無効です。"
+	}
 
-	// 成功レスポンス
+	// 成功レスポンス（Embed）
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("✅ メッセージが投稿されました！%s後に自動削除されます。", deleteTimeDisplayStr),
-			Flags:   discordgo.MessageFlagsEphemeral,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "✅ 投稿成功",
+					Description: successDescription,
+					Color:       0x00FF00, // 緑
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral,
 		},
 	})
 	if err != nil {
@@ -323,13 +357,19 @@ func scheduleMessageDeletion(s *discordgo.Session, channelID, messageID string, 
 	})
 }
 
-// respondWithError はエラーメッセージをエフェメラルメッセージとして返します
+// respondWithError はエラーメッセージをエフェメラル埋め込みメッセージとして返します
 func respondWithError(s *discordgo.Session, i *discordgo.InteractionCreate, message string) {
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: "❌ " + message,
-			Flags:   discordgo.MessageFlagsEphemeral,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "❌ エラー",
+					Description: message,
+					Color:       0xFF0000, // 赤
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral,
 		},
 	})
 	if err != nil {

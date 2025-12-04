@@ -31,10 +31,30 @@ func HandlePing(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if i.ApplicationCommandData().Name != "ping" {
 		return
 	}
+
+	latency := s.HeartbeatLatency().Milliseconds()
+
+	// レイテンシに応じて色を変更
+	var color int
+	switch {
+	case latency < 100:
+		color = 0x00FF00 // 緑: 良好
+	case latency < 200:
+		color = 0xFFFF00 // 黄: 普通
+	default:
+		color = 0xFF0000 // 赤: 遅い
+	}
+
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("Pong! (%dms)", s.HeartbeatLatency().Milliseconds()),
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "🏓 Pong!",
+					Description: fmt.Sprintf("**%dms**", latency),
+					Color:       color,
+				},
+			},
 		},
 	})
 	if err != nil {

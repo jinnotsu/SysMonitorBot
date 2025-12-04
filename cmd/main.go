@@ -65,8 +65,13 @@ func main() {
 		log.Println("Health check server is disabled")
 	}
 
-	// ステータス更新の開始
-	go services.UpdateSystemStatus(dg, *interval)
+	// システムモニタリングの開始（環境変数で制御）
+	systemMonitorEnabled := os.Getenv("SYSTEM_MONITOR_ENABLED")
+	if systemMonitorEnabled == "" || strings.ToLower(systemMonitorEnabled) == "true" {
+		go services.UpdateSystemStatus(dg, *interval)
+	} else {
+		log.Println("System monitor is disabled")
+	}
 
 	// Ctrl+Cで終了
 	stop := make(chan os.Signal, 1)
