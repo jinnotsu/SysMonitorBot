@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -327,4 +328,80 @@ func respondWithError(s *discordgo.Session, i *discordgo.InteractionCreate, mess
 	if err != nil {
 		log.Printf("Error: Failed to respond with error message: %v", err)
 	}
+}
+
+// HandleAnonymousMessageCreate はANONYMOUS_BUTTON_CHANNEL_IDに投稿されたメッセージを
+// 削除して匿名メッセージとして転送します
+func HandleAnonymousMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	// ボットからのメッセージは無視
+	if m.Author.ID == s.State.User.ID {
+		return
+	}
+
+	// ボタンチャンネルIDを取得
+	buttonChannelID := os.Getenv("ANONYMOUS_BUTTON_CHANNEL_ID")
+	if buttonChannelID == "" {
+		return
+	}
+
+	// 投稿先チャンネルIDを取得
+	postChannelID := os.Getenv("ANONYMOUS_POST_CHANNEL_ID")
+	if postChannelID == "" {
+		return
+	}
+
+	// メッセージがボタンチャンネルに投稿されたかどうか確認
+	if m.ChannelID != buttonChannelID {
+		return
+	}
+
+	// メッセージが空の場合は無視（添付ファイルのみの場合も考慮）
+	if m.Content == "" && len(m.Attachments) == 0 {
+		return
+	}
+
+	// 元のメッセージを削除
+	err := s.ChannelMessageDelete(m.ChannelID, m.ID)
+	if err != nil {
+		log.Printf("Error: Failed to delete original message: %v", err)
+		// 削除に失敗しても匿名投稿は続行
+	}
+
+	// 削除時間を取得
+	deleteDuration := getDeleteDuration()
+
+	// 匿名メッセージを構築
+	var anonymousMsg *discordgo.Message
+
+	// 添付ファイルがある場合
+	if len(m.Attachments) > 0 {
+		// 添付ファイルのURLを取得してメッセージに含める
+		var contentBuilder strings.Builder
+		if m.Content != "" {
+			contentBuilder.WriteString(m.Content)
+		}
+
+		// 添付ファイルのURLを追加
+		for _, attachment := range m.Attachments {
+			if contentBuilder.Len() > 0 {
+				contentBuilder.WriteString("\n")
+			}
+			contentBuilder.WriteString(attachment.URL)
+		}
+
+		anonymousMsg, err = s.ChannelMessageSend(postChannelID, contentBuilder.String())
+	} else {
+		// テキストのみのメッセージ
+		anonymousMsg, err = s.ChannelMessageSend(postChannelID, m.Content)
+	}
+
+	if err != nil {
+		log.Printf("Error: Failed to send anonymous message: %v", err)
+		return
+	}
+
+	// 自動削除をスケジュール
+	scheduleMessageDeletion(s, postChannelID, anonymousMsg.ID, deleteDuration)
+
+	log.Printf("Anonymous message forwarded: Original author=%s, Duration=%v", m.Author.Username, deleteDuration)
 }

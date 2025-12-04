@@ -49,6 +49,9 @@ func main() {
 	// 匿名ボードのインタラクションハンドラーを追加
 	dg.AddHandler(handlers.HandleAnonymousBoardInteraction)
 
+	// 匿名ボードのメッセージ作成ハンドラーを追加（チャンネルへの直接投稿を匿名化）
+	dg.AddHandler(handlers.HandleAnonymousMessageCreate)
+
 	// セッションの開始
 	err = dg.Open()
 	if err != nil {
