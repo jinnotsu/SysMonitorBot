@@ -1,6 +1,6 @@
 # SysMonitorBot
 
-is a Discord Bot witten Go and Copilot.
+is a Discord Bot written in Go and Copilot.
 CPU、Memoryの使用率を表示します。
 
 ![](./about.png)
@@ -8,13 +8,13 @@ CPU、Memoryの使用率を表示します。
 ## Usage
 
 ```bash
-$ mk .env
-$ echo "DISCORD_TOKEN=YourDidcordTokenHere" >> .env
+$ touch .env
+$ echo "DISCORD_TOKEN=YourDiscordTokenHere" >> .env
 
 $ go get
 $ go run . -interval=5
 ```
-intervalはStatusの更新間隔です。デフォルトは5秒です。
+intervalはStatusの更新間隔です。デフォルトは1800秒です。
 
 ## Libraries
 
