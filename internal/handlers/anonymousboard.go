@@ -81,7 +81,7 @@ func SetupAnonymousBoard(s *discordgo.Session) {
 
 	// ボタン付きメッセージを送信
 	_, err := s.ChannelMessageSendComplex(buttonChannelID, &discordgo.MessageSend{
-		Content: fmt.Sprintf("📝 **匿名メッセージボード**\n下のボタンをクリックしてメッセージを投稿できます。\n投稿されたメッセージは%s後に自動削除されます。", deleteTimeStr),
+		Content: fmt.Sprintf("<a:noted:1446011172754161788> **匿名メッセージボード**\n下のボタンをクリックしてメッセージを投稿できます。\n投稿されたメッセージは%s後に自動削除されます。", deleteTimeStr),
 		Components: []discordgo.MessageComponent{
 			discordgo.ActionsRow{
 				Components: []discordgo.MessageComponent{
@@ -90,7 +90,7 @@ func SetupAnonymousBoard(s *discordgo.Session) {
 						Style:    discordgo.PrimaryButton,
 						CustomID: AnonymousPostButtonID,
 						Emoji: &discordgo.ComponentEmoji{
-							Name: "✉️",
+							Name: "<a:noted:1446011172754161788>",
 						},
 					},
 				},
