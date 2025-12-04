@@ -306,8 +306,15 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		deleteDuration = time.Duration(seconds) * time.Second
 	}
 
-	// メッセージを投稿
-	msg, err := s.ChannelMessageSend(postChannelID, messageContent)
+	// メッセージを埋め込み形式で投稿
+	msg, err := s.ChannelMessageSendComplex(postChannelID, &discordgo.MessageSend{
+		Embeds: []*discordgo.MessageEmbed{
+			{
+				Description: messageContent,
+				Color:       0x5865F2, // Discord Blurple
+			},
+		},
+	})
 	if err != nil {
 		log.Printf("Error: Failed to send anonymous message: %v", err)
 		respondWithError(s, i, "メッセージの投稿に失敗しました。")
