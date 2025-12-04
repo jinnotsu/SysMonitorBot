@@ -75,6 +75,9 @@ func SetupAnonymousBoard(s *discordgo.Session) {
 		return
 	}
 
+	// 既存のボタンメッセージを削除
+	deleteExistingButtonMessages(s, buttonChannelID)
+
 	// 削除時間を取得
 	deleteDuration := getDeleteDuration()
 	deleteTimeStr := formatDuration(deleteDuration)
@@ -102,6 +105,59 @@ func SetupAnonymousBoard(s *discordgo.Session) {
 		return
 	}
 	log.Println("Anonymous board button sent successfully")
+}
+
+// deleteExistingButtonMessages はチャンネル内の既存のボタンメッセージを削除します
+func deleteExistingButtonMessages(s *discordgo.Session, channelID string) {
+	// ボットのユーザーIDを取得
+	botUserID := s.State.User.ID
+
+	// チャンネル内の最近のメッセージを取得（最大100件）
+	messages, err := s.ChannelMessages(channelID, 100, "", "", "")
+	if err != nil {
+		log.Printf("Warning: Failed to fetch channel messages: %v", err)
+		return
+	}
+
+	// ボットが送信したボタン付きメッセージを探して削除
+	for _, msg := range messages {
+		// ボットが送信したメッセージかどうか確認
+		if msg.Author.ID != botUserID {
+			continue
+		}
+
+		// メッセージにコンポーネント（ボタン）が含まれているか確認
+		if len(msg.Components) == 0 {
+			continue
+		}
+
+		// AnonymousPostButtonIDを持つボタンが含まれているか確認
+		if containsAnonymousPostButton(msg.Components) {
+			err := s.ChannelMessageDelete(channelID, msg.ID)
+			if err != nil {
+				log.Printf("Warning: Failed to delete existing button message (ID=%s): %v", msg.ID, err)
+			} else {
+				log.Printf("Deleted existing anonymous board button message (ID=%s)", msg.ID)
+			}
+		}
+	}
+}
+
+// containsAnonymousPostButton はコンポーネント内にAnonymousPostButtonIDを持つボタンが含まれているか確認します
+func containsAnonymousPostButton(components []discordgo.MessageComponent) bool {
+	for _, comp := range components {
+		switch c := comp.(type) {
+		case *discordgo.ActionsRow:
+			for _, rowComp := range c.Components {
+				if button, ok := rowComp.(*discordgo.Button); ok {
+					if button.CustomID == AnonymousPostButtonID {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // HandleAnonymousBoardInteraction は匿名ボード関連のインタラクションを処理します
