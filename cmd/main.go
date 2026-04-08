@@ -10,6 +10,8 @@ import (
 	"SysMonitorBot/internal/handlers"
 	"SysMonitorBot/internal/server"
 	"SysMonitorBot/internal/services"
+	"SysMonitorBot/internal/storage"
+	"SysMonitorBot/internal/utils"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
@@ -24,6 +26,25 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Info: .env file not found, using environment variables")
 	}
+
+	// コンフィグストアを初期化
+	redisURL := os.Getenv("REDIS_URL")
+	useRedis := strings.ToLower(os.Getenv("USE_REDIS")) == "true"
+
+	var store storage.ConfigStore
+	if useRedis && redisURL != "" {
+		log.Println("Initializing Redis config store...")
+		store = storage.NewFallbackStore(redisURL)
+	} else {
+		log.Println("Initializing file-based config store...")
+		store = storage.NewFileStore()
+	}
+	utils.InitializeConfigStore(store)
+	defer store.Close()
+
+	// 管理者ユーザーIDを読み込む
+	adminUserIDs := os.Getenv("ADMIN_USER_IDS")
+	utils.LoadAdminUsers(adminUserIDs)
 
 	// 環境変数からDISCORD_TOKENを取得
 	token := os.Getenv("DISCORD_TOKEN")
@@ -40,6 +61,7 @@ func main() {
 	// スラッシュコマンドの登録
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		handlers.RegisterSlashCommands(s)
+		handlers.RegisterConfigCommand(s)
 		log.Println("Registered slash commands")
 
 		// 匿名ボードの設置
@@ -48,6 +70,9 @@ func main() {
 
 	// 匿名ボードのインタラクションハンドラーを追加
 	dg.AddHandler(handlers.HandleAnonymousBoardInteraction)
+
+	// /config コマンドハンドラーを追加
+	dg.AddHandler(handlers.HandleConfigCommand)
 
 	// セッションの開始
 	err = dg.Open()
