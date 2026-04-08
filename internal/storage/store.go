@@ -24,4 +24,7 @@ type ConfigStore interface {
 
 	// InitializeFromFile は .env ファイルからストアを初期化します
 	InitializeFromFile(ctx context.Context) error
+
+	// InitializeFromEnv は環境変数からストアを初期化します
+	InitializeFromEnv(ctx context.Context) error
 }

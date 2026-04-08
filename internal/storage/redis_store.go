@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -132,5 +133,35 @@ func (r *RedisStore) InitializeFromFile(ctx context.Context) error {
 	}
 
 	log.Printf("Successfully initialized Redis with %d configuration variables", len(configs))
+	return nil
+}
+
+// InitializeFromEnv は環境変数から Redis を初期化します
+func (r *RedisStore) InitializeFromEnv(ctx context.Context) error {
+	log.Println("Initializing Redis from environment variables...")
+
+	// 環境変数から初期化する設定変数一覧
+	varNames := []string{
+		"SYSTEM_MONITOR_ENABLED",
+		"HEALTH_CHECK_ENABLED",
+		"PORT",
+		"ANONYMOUS_BUTTON_CHANNEL_ID",
+		"ANONYMOUS_POST_CHANNEL_ID",
+		"ANONYMOUS_MESSAGE_DELETE_SECONDS",
+	}
+
+	count := 0
+	for _, varName := range varNames {
+		value := os.Getenv(varName)
+		if value != "" {
+			if err := r.Set(ctx, varName, value); err != nil {
+				return fmt.Errorf("failed to set %s in Redis: %w", varName, err)
+			}
+			log.Printf("Initialized Redis: %s=%s", varName, value)
+			count++
+		}
+	}
+
+	log.Printf("Successfully initialized Redis with %d environment variables", count)
 	return nil
 }

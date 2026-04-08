@@ -43,7 +43,7 @@ func main() {
 	utils.InitializeConfigStore(store)
 	defer store.Close()
 
-	// ストアが空の場合、.env から初期化
+	// ストアが空の場合、環境変数から初期化
 	ctx, cancel := context.WithTimeout(context.Background(), 10*1000000000) // 10秒
 	defer cancel()
 
@@ -51,9 +51,9 @@ func main() {
 	if err != nil {
 		log.Printf("Warning: Failed to check if store is empty: %v", err)
 	} else if isEmpty {
-		log.Println("Store is empty. Initializing from .env file...")
-		if err := store.InitializeFromFile(ctx); err != nil {
-			log.Printf("Warning: Failed to initialize store from .env file: %v", err)
+		log.Println("Store is empty. Initializing from environment variables...")
+		if err := store.InitializeFromEnv(ctx); err != nil {
+			log.Printf("Warning: Failed to initialize store from environment variables: %v", err)
 		}
 	} else {
 		log.Println("Store already contains data. Skipping initialization.")

@@ -157,3 +157,19 @@ func (f *FallbackStore) InitializeFromFile(ctx context.Context) error {
 
 	return nil
 }
+
+// InitializeFromEnv は環境変数からストアを初期化します（プライマリ、またはフォールバック）
+func (f *FallbackStore) InitializeFromEnv(ctx context.Context) error {
+	if err := f.primary.InitializeFromEnv(ctx); err != nil {
+		log.Printf("Error: Primary store InitializeFromEnv failed: %v", err)
+
+		// フォールバック店から初期化する
+		if f.fallback != f.primary {
+			log.Println("Attempting to InitializeFromEnv from fallback store...")
+			return f.fallback.InitializeFromEnv(ctx)
+		}
+		return err
+	}
+
+	return nil
+}

@@ -143,3 +143,33 @@ func (f *FileStore) InitializeFromFile(ctx context.Context) error {
 	log.Println("FileStore: Already initialized from .env file")
 	return nil
 }
+
+// InitializeFromEnv は環境変数から FileStore を初期化します
+// FileStore の場合は環境変数から .env ファイルに書き込みます
+func (f *FileStore) InitializeFromEnv(ctx context.Context) error {
+	log.Println("Initializing FileStore from environment variables...")
+
+	// 環境変数から初期化する設定変数一覧
+	varNames := []string{
+		"SYSTEM_MONITOR_ENABLED",
+		"HEALTH_CHECK_ENABLED",
+		"PORT",
+		"ANONYMOUS_BUTTON_CHANNEL_ID",
+		"ANONYMOUS_POST_CHANNEL_ID",
+		"ANONYMOUS_MESSAGE_DELETE_SECONDS",
+	}
+
+	count := 0
+	for _, varName := range varNames {
+		value := os.Getenv(varName)
+		if value != "" {
+			if err := f.Set(ctx, varName, value); err != nil {
+				return fmt.Errorf("failed to set %s in .env file: %w", varName, err)
+			}
+			count++
+		}
+	}
+
+	log.Printf("Successfully initialized FileStore with %d environment variables", count)
+	return nil
+}

@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"log"
+	"os"
 
 	"SysMonitorBot/internal/storage"
 )
@@ -26,7 +27,14 @@ func SetEnv(key, value string) error {
 }
 
 // GetEnv はストレージから環境変数を取得します
+// 優先度：環境変数 > ストレージ（Redis/ファイル）> デフォルト値
 func GetEnv(key string, defaultValue string) string {
+	// 優先度1：環境変数から取得
+	if envValue := os.Getenv(key); envValue != "" {
+		return envValue
+	}
+
+	// 優先度2：ストレージから取得
 	if configStore == nil {
 		log.Printf("Warning: Config store not initialized, using default value for %s", key)
 		return defaultValue
@@ -46,6 +54,7 @@ func GetEnv(key string, defaultValue string) string {
 }
 
 // ListConfigVariables はストレージからすべての設定変数を取得します
+// 優先度：環境変数 > ストレージ（Redis/ファイル）
 func ListConfigVariables() map[string]string {
 	if configStore == nil {
 		log.Println("Warning: Config store not initialized")
@@ -57,6 +66,22 @@ func ListConfigVariables() map[string]string {
 	if err != nil {
 		log.Printf("Warning: Failed to list config variables: %v", err)
 		return make(map[string]string)
+	}
+
+	// 環境変数で上書き（優先度）
+	varNames := []string{
+		"SYSTEM_MONITOR_ENABLED",
+		"HEALTH_CHECK_ENABLED",
+		"PORT",
+		"ANONYMOUS_BUTTON_CHANNEL_ID",
+		"ANONYMOUS_POST_CHANNEL_ID",
+		"ANONYMOUS_MESSAGE_DELETE_SECONDS",
+	}
+
+	for _, varName := range varNames {
+		if envValue := os.Getenv(varName); envValue != "" {
+			configs[varName] = envValue
+		}
 	}
 
 	return configs
