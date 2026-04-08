@@ -18,4 +18,10 @@ type ConfigStore interface {
 
 	// Close はストア接続をクローズします
 	Close() error
+
+	// IsEmpty はストアが空（データがない）かどうかを判定します
+	IsEmpty(ctx context.Context) (bool, error)
+
+	// InitializeFromFile は .env ファイルからストアを初期化します
+	InitializeFromFile(ctx context.Context) error
 }

@@ -96,3 +96,41 @@ func (r *RedisStore) Delete(ctx context.Context, key string) error {
 func (r *RedisStore) Close() error {
 	return r.client.Close()
 }
+
+// IsEmpty は Redis にデータが格納されているかどうかを判定します
+func (r *RedisStore) IsEmpty(ctx context.Context) (bool, error) {
+	// bot_config:* キーが存在するか確認
+	keys, err := r.client.Keys(ctx, configKeyPrefix+"*").Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check Redis keys: %w", err)
+	}
+
+	return len(keys) == 0, nil
+}
+
+// InitializeFromFile は .env ファイルから Redis を初期化します
+func (r *RedisStore) InitializeFromFile(ctx context.Context) error {
+	log.Println("Initializing Redis from .env file...")
+
+	fileStore := NewFileStore()
+	configs, err := fileStore.List(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to read .env file: %w", err)
+	}
+
+	if len(configs) == 0 {
+		log.Println("No configuration variables found in .env file")
+		return nil
+	}
+
+	// .env から読み込んだ全設定変数を Redis に書き込む
+	for key, value := range configs {
+		if err := r.Set(ctx, key, value); err != nil {
+			return fmt.Errorf("failed to set %s in Redis: %w", key, err)
+		}
+		log.Printf("Initialized Redis: %s=%s", key, value)
+	}
+
+	log.Printf("Successfully initialized Redis with %d configuration variables", len(configs))
+	return nil
+}

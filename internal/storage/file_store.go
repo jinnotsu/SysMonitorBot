@@ -127,3 +127,19 @@ func (f *FileStore) Delete(ctx context.Context, key string) error {
 func (f *FileStore) Close() error {
 	return nil
 }
+
+// IsEmpty は .env ファイルが空かどうかを判定します
+func (f *FileStore) IsEmpty(ctx context.Context) (bool, error) {
+	configs, err := f.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	return len(configs) == 0, nil
+}
+
+// InitializeFromFile は .env ファイルから FileStore を初期化します
+// FileStore の場合は既に .env から読み込んでいるため、何もしない
+func (f *FileStore) InitializeFromFile(ctx context.Context) error {
+	log.Println("FileStore: Already initialized from .env file")
+	return nil
+}

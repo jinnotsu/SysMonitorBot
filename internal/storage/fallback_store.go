@@ -124,3 +124,36 @@ func (f *FallbackStore) Close() error {
 func (f *FallbackStore) IsUsingFallback() bool {
 	return f.useFallback
 }
+
+// IsEmpty はストアが空かどうかを判定します（プライマリ、またはフォールバック）
+func (f *FallbackStore) IsEmpty(ctx context.Context) (bool, error) {
+	isEmpty, err := f.primary.IsEmpty(ctx)
+	if err != nil {
+		log.Printf("Error: Primary store IsEmpty failed: %v", err)
+
+		// フォールバック店から確認する
+		if f.fallback != f.primary {
+			log.Println("Attempting to check IsEmpty from fallback store...")
+			return f.fallback.IsEmpty(ctx)
+		}
+		return false, err
+	}
+
+	return isEmpty, nil
+}
+
+// InitializeFromFile は .env ファイルからストアを初期化します（プライマリ、またはフォールバック）
+func (f *FallbackStore) InitializeFromFile(ctx context.Context) error {
+	if err := f.primary.InitializeFromFile(ctx); err != nil {
+		log.Printf("Error: Primary store InitializeFromFile failed: %v", err)
+
+		// フォールバック店から初期化する
+		if f.fallback != f.primary {
+			log.Println("Attempting to InitializeFromFile from fallback store...")
+			return f.fallback.InitializeFromFile(ctx)
+		}
+		return err
+	}
+
+	return nil
+}
