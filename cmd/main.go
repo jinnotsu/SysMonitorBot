@@ -88,9 +88,6 @@ func main() {
 	// 匿名ボードのインタラクションハンドラーを追加
 	dg.AddHandler(handlers.HandleAnonymousBoardInteraction)
 
-	// /config コマンドハンドラーを追加
-	dg.AddHandler(handlers.HandleConfigCommand)
-
 	// セッションの開始
 	err = dg.Open()
 	if err != nil {

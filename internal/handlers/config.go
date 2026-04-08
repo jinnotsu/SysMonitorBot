@@ -11,6 +11,7 @@ import (
 
 // RegisterConfigCommand は /config スラッシュコマンドを登録します
 func RegisterConfigCommand(s *discordgo.Session) {
+	s.AddHandler(HandleConfigCommand)
 	log.Println("DEBUG: Attempting to register /config command")
 
 	// 既存のコマンドを削除してから登録（重複回避）
