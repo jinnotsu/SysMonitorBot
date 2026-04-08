@@ -11,6 +11,45 @@ import (
 
 // RegisterConfigCommand は /config スラッシュコマンドを登録します
 func RegisterConfigCommand(s *discordgo.Session) {
+	log.Println("DEBUG: Attempting to register /config command")
+
+	// 既存のコマンドを削除してから登録（重複回避）
+	commands, err := s.ApplicationCommands(s.State.User.ID, "")
+	if err != nil {
+		log.Printf("Warning: Failed to get existing commands: %v", err)
+	} else {
+		for _, cmd := range commands {
+			if cmd.Name == "config" {
+				log.Println("DEBUG: Removing existing /config command")
+				s.ApplicationCommandDelete(s.State.User.ID, "", cmd.ID)
+			}
+		}
+	}
+
+	// 設定変数の選択肢を生成
+	configVariableNames := []string{
+		"SYSTEM_MONITOR_ENABLED",
+		"HEALTH_CHECK_ENABLED",
+		"PORT",
+		"ANONYMOUS_BUTTON_CHANNEL_ID",
+		"ANONYMOUS_POST_CHANNEL_ID",
+		"ANONYMOUS_MESSAGE_DELETE_SECONDS",
+	}
+
+	var setChoices []*discordgo.ApplicationCommandOptionChoice
+	var getChoices []*discordgo.ApplicationCommandOptionChoice
+
+	for _, v := range configVariableNames {
+		setChoices = append(setChoices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  v,
+			Value: v,
+		})
+		getChoices = append(getChoices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  v,
+			Value: v,
+		})
+	}
+
 	cmd := &discordgo.ApplicationCommand{
 		Name:        "config",
 		Description: "Bot の設定を管理します（管理者のみ）",
@@ -25,16 +64,7 @@ func RegisterConfigCommand(s *discordgo.Session) {
 						Name:        "variable",
 						Description: "変数名",
 						Required:    true,
-						Choices: func() []*discordgo.ApplicationCommandOptionChoice {
-							var choices []*discordgo.ApplicationCommandOptionChoice
-							for _, v := range utils.GetAllConfigVariables() {
-								choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
-									Name:  v,
-									Value: v,
-								})
-							}
-							return choices
-						}(),
+						Choices:     setChoices,
 					},
 					{
 						Type:        discordgo.ApplicationCommandOptionString,
@@ -54,16 +84,7 @@ func RegisterConfigCommand(s *discordgo.Session) {
 						Name:        "variable",
 						Description: "変数名",
 						Required:    true,
-						Choices: func() []*discordgo.ApplicationCommandOptionChoice {
-							var choices []*discordgo.ApplicationCommandOptionChoice
-							for _, v := range utils.GetAllConfigVariables() {
-								choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
-									Name:  v,
-									Value: v,
-								})
-							}
-							return choices
-						}(),
+						Choices:     getChoices,
 					},
 				},
 			},
@@ -75,25 +96,35 @@ func RegisterConfigCommand(s *discordgo.Session) {
 		},
 	}
 
-	_, err := s.ApplicationCommandCreate(s.State.User.ID, "", cmd)
+	_, err = s.ApplicationCommandCreate(s.State.User.ID, "", cmd)
 	if err != nil {
 		log.Fatalf("Error: Failed to create /config command: %v", err)
 	}
-	log.Println("Registered /config command")
+	log.Println("DEBUG: Successfully registered /config command")
 }
 
 // HandleConfigCommand は /config スラッシュコマンドを処理します
 func HandleConfigCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	log.Println("DEBUG: HandleConfigCommand called")
+
 	// ApplicationCommandタイプのインタラクションのみ処理
 	if i.Type != discordgo.InteractionApplicationCommand {
-		return
-	}
-	if i.ApplicationCommandData().Name != "config" {
+		log.Printf("DEBUG: Not ApplicationCommand type: %v", i.Type)
 		return
 	}
 
+	commandName := i.ApplicationCommandData().Name
+	log.Printf("DEBUG: Command name: %s", commandName)
+
+	if commandName != "config" {
+		return
+	}
+
+	log.Printf("DEBUG: Config command received from user: %s", i.Member.User.ID)
+
 	// 権限チェック
 	if !utils.IsAdmin(i.Member.User.ID) {
+		log.Printf("DEBUG: User %s is not admin", i.Member.User.ID)
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -106,11 +137,13 @@ func HandleConfigCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	options := i.ApplicationCommandData().Options
 	if len(options) == 0 {
+		log.Println("DEBUG: No options provided")
 		return
 	}
 
 	subcommand := options[0].Name
 	subcommandOptions := options[0].Options
+	log.Printf("DEBUG: Subcommand: %s", subcommand)
 
 	switch subcommand {
 	case "set":
@@ -134,8 +167,11 @@ func handleConfigSet(s *discordgo.Session, i *discordgo.InteractionCreate, optio
 		}
 	}
 
+	log.Printf("DEBUG: Set command - variable: %s, value: %s", varName, value)
+
 	// バリデーション
 	if err := utils.ValidateConfig(varName, value); err != nil {
+		log.Printf("DEBUG: Validation error: %v", err)
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -146,8 +182,9 @@ func handleConfigSet(s *discordgo.Session, i *discordgo.InteractionCreate, optio
 		return
 	}
 
-	// .env ファイルに書き込む
+	// ストレージに書き込む
 	if err := utils.SetEnv(varName, value); err != nil {
+		log.Printf("DEBUG: SetEnv error: %v", err)
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -157,6 +194,8 @@ func handleConfigSet(s *discordgo.Session, i *discordgo.InteractionCreate, optio
 		})
 		return
 	}
+
+	log.Printf("DEBUG: Successfully set %s to %s", varName, value)
 
 	// 成功レスポンス
 	successMsg := fmt.Sprintf("✅ %s を %s に変更しました\n⚠️ ボットを再起動してください", varName, value)
@@ -179,6 +218,8 @@ func handleConfigGet(s *discordgo.Session, i *discordgo.InteractionCreate, optio
 		}
 	}
 
+	log.Printf("DEBUG: Get command - variable: %s", varName)
+
 	currentValue := utils.GetEnv(varName, "(未設定)")
 	if currentValue == "" {
 		currentValue = "(空)"
@@ -196,9 +237,12 @@ func handleConfigGet(s *discordgo.Session, i *discordgo.InteractionCreate, optio
 
 // handleConfigList は "config list" サブコマンドを処理します
 func handleConfigList(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	log.Println("DEBUG: List command")
+
 	configs := utils.ListConfigVariables()
 
 	if len(configs) == 0 {
+		log.Println("DEBUG: No configs found")
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
