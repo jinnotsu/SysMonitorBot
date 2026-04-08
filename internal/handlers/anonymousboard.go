@@ -21,10 +21,14 @@ const (
 	AnonymousDeleteTimeInputID = "anonymous_delete_time_input"
 	// メンション入力のカスタムID
 	AnonymousMentionInputID = "anonymous_mention_input"
+	// Embed色入力のカスタムID
+	AnonymousColorInputID = "anonymous_color_input"
 	// デフォルトの削除時間（秒）
 	DefaultDeleteSeconds = 86400 // 24時間
 	// 最大削除時間（秒）
 	MaxDeleteSeconds = 604800 // 7日
+	// デフォルトの埋め込み色
+	DefaultEmbedColor = 0x5865F2 // Discord Blurple
 )
 
 // getDeleteDuration は環境変数から削除までの時間を取得します
@@ -67,6 +71,32 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d秒", int(d.Seconds()))
 }
 
+// parseColorCode は16進数カラーコード（#RRGGBB または RRGGBB）をint型に変換します
+// 入力が有効でない場合は-1を返します
+func parseColorCode(colorStr string) int {
+	if colorStr == "" {
+		return DefaultEmbedColor
+	}
+
+	// ハッシュを削除
+	if len(colorStr) > 0 && colorStr[0] == '#' {
+		colorStr = colorStr[1:]
+	}
+
+	// 6文字の16進数コードであることを確認
+	if len(colorStr) != 6 {
+		return -1
+	}
+
+	// 16進数形式のバリデーション
+	color, err := strconv.ParseInt(colorStr, 16, 32)
+	if err != nil {
+		return -1
+	}
+
+	return int(color)
+}
+
 // SetupAnonymousBoard は指定されたチャンネルに匿名投稿ボタンを設置します
 func SetupAnonymousBoard(s *discordgo.Session) {
 	// 環境変数からボタンを設置するチャンネルIDを取得
@@ -102,7 +132,7 @@ func SetupAnonymousBoard(s *discordgo.Session) {
 			{
 				Title:       "<a:noted:1446011172754161788> 匿名メッセージボード",
 				Description: descriptionText,
-				Color:       0x5865F2, // Discord Blurple
+				Color:       DefaultEmbedColor,
 			},
 		},
 		Components: []discordgo.MessageComponent{
@@ -261,6 +291,19 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 						},
 					},
 				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    AnonymousColorInputID,
+							Label:       "Embed の色",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "#5865F2",
+							Required:    false,
+							MinLength:   0,
+							MaxLength:   7,
+						},
+					},
+				},
 			},
 		},
 	})
@@ -283,6 +326,7 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	var messageContent string
 	var deleteTimeStr string
 	var mentionContent string
+	var colorStr string
 	for _, comp := range data.Components {
 		if row, ok := comp.(*discordgo.ActionsRow); ok {
 			for _, rowComp := range row.Components {
@@ -294,6 +338,8 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 						deleteTimeStr = textInput.Value
 					case AnonymousMentionInputID:
 						mentionContent = textInput.Value
+					case AnonymousColorInputID:
+						colorStr = textInput.Value
 					}
 				}
 			}
@@ -324,13 +370,20 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		deleteDuration = time.Duration(seconds) * time.Second
 	}
 
+	// 色を解析
+	embedColor := parseColorCode(colorStr)
+	if embedColor == -1 {
+		respondWithError(s, i, "Embed の色は16進数カラーコード（#RRGGBB または RRGGBB）で指定してください。")
+		return
+	}
+
 	// メッセージを埋め込み形式で投稿
 	// メンションはEmbed外のContentに追加（Embed内のメンションは通知されないため）
 	messageSend := &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{
 			{
 				Description: messageContent,
-				Color:       0x5865F2, // Discord Blurple
+				Color:       embedColor,
 			},
 		},
 	}
